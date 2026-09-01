@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>مشغل الفحص التجريبي</title>
+    <!-- مكتبة مشغل Plyr الحديث -->
+    <link rel="stylesheet" href="https://cdn.plyr.io/3.7.8/plyr.css" />
+    <style>
+        body {
+            background-color: #0b0c10;
+            color: #ffffff;
+            font-family: sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        .container {
+            width: 100%;
+            max-width: 850px;
+            text-align: center;
+        }
+        .controls {
+            margin-bottom: 20px;
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+        }
+        input, button {
+            padding: 10px 15px;
+            border-radius: 6px;
+            border: 1px solid #1f2833;
+            background: #1f2833;
+            color: white;
+            font-size: 14px;
+        }
+        button {
+            background-color: #45f3ff;
+            color: #000;
+            font-weight: bold;
+            cursor: pointer;
+            border: none;
+        }
+        .video-box {
+            width: 100%;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.7);
+            background: #000;
+        }
+        #status {
+            margin-top: 10px;
+            font-size: 14px;
+            color: #c5c6c7;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>🧪 تجربة البث المباشر المستخرج (صفر إعلانات)</h2>
+    
+    <div class="controls">
+        <!-- تجربة فيلم Fight Club مثلاً بمعرّف 550 أو أي معرّف آخر -->
+        <input type="text" id="tmdbInput" placeholder="أدخل TMDB ID (مثال: 550)" value="550">
+        <button onclick="loadDirectStream()">تشغيل الفيلم</button>
+    </div>
+
+    <div class="video-box">
+        <video id="player" controls playsinline></video>
+    </div>
+    <div id="status">جاهز للاختبار...</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+<script src="https://cdn.plyr.io/3.7.8/plyr.polyfilled.js"></script>
+<script>
+    let playerInstance = null;
+
+    async function loadDirectStream() {
+        const id = document.getElementById('tmdbInput').value.trim();
+        const status = document.getElementById('status');
+        const video = document.getElementById('player');
+
+        if (!id) return;
+
+        status.innerText = "⏳ جاري استخراج الرابط المباشر من السيرفر...";
+
+        try {
+            // طلب الرابط الخام من الـ API الخاص بنا
+            const res = await fetch(`/api/source?id=${id}&type=movie`);
+            const data = await res.json();
+
+            if (!data.streamUrl) {
+                status.innerText = "❌ تعذر العثور على رابط مباشر لهذا العمل";
+                return;
+            }
+
+            status.innerText = "✅ تم استخراج رابط البث! جاري التشغيل داخل المشغل الخاص...";
+
+            // تشغيل الرابط الخام المباشر في Plyr
+            if (Hls.isSupported() && data.streamUrl.includes('.m3u8')) {
+                const hls = new Hls();
+                hls.loadSource(data.streamUrl);
+                hls.attachMedia(video);
+                hls.on(Hls.Events.MANIFEST_PARSED, function () {
+                    if (!playerInstance) playerInstance = new Plyr(video);
+                    video.play();
+                });
+            } else {
+                video.src = data.streamUrl;
+                if (!playerInstance) playerInstance = new Plyr(video);
+                video.play();
+            }
+
+        } catch (err) {
+            status.innerText = "⚠️ خطأ في الاتصال: " + err.message;
+        }
+    }
+</script>
+</body>
+</html>
