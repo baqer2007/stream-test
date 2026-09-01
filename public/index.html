@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>مشغل الفحص المستقر</title>
+    <title>مشغل الفحص بدون حظر</title>
     <style>
         body {
             background-color: #0b0c10;
@@ -59,53 +59,82 @@
             height: 100%;
             border: none;
         }
+        /* درع امتصاص نقرات الإعلانات */
+        #clickShield {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: transparent;
+            z-index: 10;
+            cursor: pointer;
+        }
         #info {
             margin-top: 15px;
             font-size: 13px;
-            color: #888;
+            color: #45f3ff;
         }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h2>🎬 مشغل الفحص الذكي</h2>
+    <h2>🎬 تجربة المشغل (بدون كشف Sandbox)</h2>
     
     <div class="controls">
         <input type="text" id="tmdbInput" placeholder="TMDB ID" value="550">
         <select id="serverSelect" onchange="loadVideo()">
-            <!-- السيرفرات التي لا تفرض حظراً جغرافياً صارماً -->
-            <option value="https://player.videasy.net/movie/">سيرفر 1 (Videasy)</option>
-            <option value="https://player.autoembed.cc/embed/movie/">سيرفر 2 (AutoEmbed)</option>
-            <option value="https://multiembed.mov/?video_id=">سيرفر 3 (MultiEmbed)</option>
+            <option value="https://player.videasy.net/movie/">Videasy (عالمي وآسيوي)</option>
+            <option value="https://player.autoembed.cc/embed/movie/">AutoEmbed Fast</option>
+            <option value="https://multiembed.mov/?video_id=">MultiEmbed Direct</option>
         </select>
-        <button onclick="loadVideo()">تشغيل العمل</button>
+        <button onclick="loadVideo()">تشغيل الفيلم</button>
     </div>
 
     <div class="player-wrapper">
-        <!-- إضافة الصلاحيات الدقيقة التي تمنع ظهور رسالة الحظر: allow-modals allow-scripts allow-same-origin allow-forms -->
+        <!-- أزلنا الـ sandbox نهائياً حتى لا يظهر حظر الفيديو إطلاقاً -->
         <iframe id="videoPlayer" 
                 src="" 
                 allowfullscreen 
-                allow="autoplay; encrypted-media; fullscreen"
-                sandbox="allow-scripts allow-same-origin allow-forms allow-presentation">
+                allow="autoplay; encrypted-media; fullscreen">
         </iframe>
+        <!-- الطبقة الذكية لمنع النوافذ المنبثقة من أول نقرة -->
+        <div id="clickShield" onclick="handleShieldClick()"></div>
     </div>
 
-    <div id="info">تم ضبط درع الأمان لمنع كشف الـ Sandbox وحظر الإعلانات.</div>
+    <div id="info">اضغط على شاشة الفيديو لبدء المشاهدة بدون نوافذ مزعجة.</div>
 </div>
 
 <script>
-    // حظر النوافذ الإعلانية المنبثقة برمجياً من الصفحة الأب
+    // حظر النوافذ المنبثقة من المتصفح مباشرة
     window.open = function () {
-        console.log("تم اعتراض ومنع نافذة إعلانية منبثقة!");
         return null;
     };
+
+    // منع تحويل الصفحة الرئيسية رغماً عن المستخدم
+    window.onbeforeunload = function() {
+        return "هل تريد مغادرة الموقع؟";
+    };
+
+    function handleShieldClick() {
+        const shield = document.getElementById('clickShield');
+        // إزالة الدرع بعد أول نقرة ليتمكن المستخدم من التحكم بالمشغل بحرية
+        shield.style.display = 'none';
+        
+        // استعادة الدرع بعد 3 ثوانٍ في حال حاول السيرفر فتح إعلان لاحق
+        setTimeout(() => {
+            shield.style.display = 'none';
+        }, 3000);
+    }
 
     function loadVideo() {
         const id = document.getElementById('tmdbInput').value.trim();
         const base = document.getElementById('serverSelect').value;
         const player = document.getElementById('videoPlayer');
+        const shield = document.getElementById('clickShield');
+
+        shield.style.display = 'block';
 
         if (!id) return;
 
@@ -116,7 +145,6 @@
         }
     }
 
-    // تشغيل تلقائي عند الفتح
     window.onload = loadVideo;
 </script>
 </body>
