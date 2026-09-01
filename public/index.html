@@ -3,8 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>مشغل الفحص التجريبي</title>
-    <!-- مكتبة مشغل Plyr الحديث -->
+    <title>تجربة البث المباشر</title>
     <link rel="stylesheet" href="https://cdn.plyr.io/3.7.8/plyr.css" />
     <style>
         body {
@@ -17,7 +16,7 @@
             justify-content: center;
             min-height: 100vh;
             margin: 0;
-            padding: 20px;
+            padding: 15px;
             box-sizing: border-box;
         }
         .container {
@@ -54,9 +53,9 @@
             background: #000;
         }
         #status {
-            margin-top: 10px;
+            margin-top: 15px;
             font-size: 14px;
-            color: #c5c6c7;
+            color: #45f3ff;
         }
     </style>
 </head>
@@ -66,8 +65,7 @@
     <h2>🧪 تجربة البث المباشر المستخرج (صفر إعلانات)</h2>
     
     <div class="controls">
-        <!-- تجربة فيلم Fight Club مثلاً بمعرّف 550 أو أي معرّف آخر -->
-        <input type="text" id="tmdbInput" placeholder="أدخل TMDB ID (مثال: 550)" value="550">
+        <input type="text" id="tmdbInput" placeholder="أدخل TMDB ID" value="550">
         <button onclick="loadDirectStream()">تشغيل الفيلم</button>
     </div>
 
@@ -79,8 +77,17 @@
 
 <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
 <script src="https://cdn.plyr.io/3.7.8/plyr.polyfilled.js"></script>
+
 <script>
-    let playerInstance = null;
+    let player = null;
+    let hls = null;
+
+    document.addEventListener('DOMContentLoaded', () => {
+        player = new Plyr('#player', {
+            autoplay: true,
+            controls: ['play-large', 'play', 'progress', 'current-time', 'mute', 'volume', 'fullscreen']
+        });
+    });
 
     async function loadDirectStream() {
         const id = document.getElementById('tmdbInput').value.trim();
@@ -92,7 +99,6 @@
         status.innerText = "⏳ جاري استخراج الرابط المباشر من السيرفر...";
 
         try {
-            // طلب الرابط الخام من الـ API الخاص بنا
             const res = await fetch(`/api/source?id=${id}&type=movie`);
             const data = await res.json();
 
@@ -101,21 +107,38 @@
                 return;
             }
 
-            status.innerText = "✅ تم استخراج رابط البث! جاري التشغيل داخل المشغل الخاص...";
+            status.innerText = "✅ جاري بدء تشغيل الفيديو...";
+            const streamUrl = data.streamUrl;
 
-            // تشغيل الرابط الخام المباشر في Plyr
-            if (Hls.isSupported() && data.streamUrl.includes('.m3u8')) {
-                const hls = new Hls();
-                hls.loadSource(data.streamUrl);
-                hls.attachMedia(video);
-                hls.on(Hls.Events.MANIFEST_PARSED, function () {
-                    if (!playerInstance) playerInstance = new Plyr(video);
-                    video.play();
-                });
+            // إذا كان الرابط m3u8 نستخدم HLS.js
+            if (streamUrl.includes('.m3u8')) {
+                if (Hls.isSupported()) {
+                    if (hls) hls.destroy();
+                    hls = new Hls({
+                        xhrSetup: function(xhr, url) {
+                            xhr.withCredentials = false;
+                        }
+                    });
+                    hls.loadSource(streamUrl);
+                    hls.attachMedia(video);
+                    hls.on(Hls.Events.MANIFEST_PARSED, function () {
+                        video.play().catch(e => console.log(e));
+                    });
+                    hls.on(Hls.Events.ERROR, function (event, data) {
+                        if (data.fatal) {
+                            status.innerText = "⚠️ خطأ في تدفق HLS، جاري المحاولة كمصدر بديل...";
+                        }
+                    });
+                } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                    video.src = streamUrl;
+                    video.play().catch(e => console.log(e));
+                }
             } else {
-                video.src = data.streamUrl;
-                if (!playerInstance) playerInstance = new Plyr(video);
-                video.play();
+                // إذا كان رابط MP4 مباشر
+                if (hls) hls.destroy();
+                video.src = streamUrl;
+                video.load();
+                video.play().catch(e => console.log(e));
             }
 
         } catch (err) {
