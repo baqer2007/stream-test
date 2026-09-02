@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>مشغل البث الخام المباشر</title>
-    <!-- مكتبة HLS لدعم البث الخام بصيغ m3u8 و mp4 -->
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, sans-serif; }
@@ -27,14 +26,14 @@
     </div>
 
     <div class="video-box">
-        <video id="directPlayer" controls playsinline preload="auto"></video>
+        <video id="directPlayer" controls playsinline></video>
     </div>
 
     <div id="log">اضغط "سحب وتشغيل" لبدء البث المباشر...</div>
 </div>
 
 <script>
-    let hlsInstance = null;
+    let hls = null;
 
     async function requestRawStream() {
         const title = document.getElementById('queryInput').value.trim();
@@ -43,16 +42,7 @@
 
         if (!title) return;
 
-        log.innerText = `⏳ جاري الاتصال بالخادم واستخراج الرابط لـ (${title})...`;
-
-        // إيقاف أي بث سابق وتنظيف الذاكرة
-        if (hlsInstance) {
-            hlsInstance.destroy();
-            hlsInstance = null;
-        }
-        video.pause();
-        video.removeAttribute('src');
-        video.load();
+        log.innerText = `⏳ جاري الاتصال بالخادم واستخراج البث لـ (${title})...`;
 
         try {
             const res = await fetch(`/api/extract?title=${encodeURIComponent(title)}`);
@@ -64,34 +54,29 @@
             }
 
             const streamUrl = data.streamUrl;
-            log.innerText = `✅ تم استخراج الرابط المباشر، جاري التهيئة...`;
 
-            // معالجة تشغيل الروابط بحسب نوعها (HLS أو MP4)
-            if (streamUrl.includes('.m3u8')) {
-                if (Hls.isSupported()) {
-                    hlsInstance = new Hls();
-                    hlsInstance.loadSource(streamUrl);
-                    hlsInstance.attachMedia(video);
-                    hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
-                        log.innerText = `✅ البث المباشر يعمل بنجاح: ${data.title}`;
-                        video.play().catch(() => {
-                            log.innerText = `▶️ اضغط زر التشغيل في المشغل لبدء العرض`;
-                        });
-                    });
-                } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-                    video.src = streamUrl;
-                    video.play().catch(() => {});
-                }
-            } else {
-                // إذا كان رابط MP4 مباشر
-                video.src = streamUrl;
-                video.load();
-                video.oncanplay = () => {
-                    log.innerText = `✅ الفيديو جاهز: ${data.title}`;
+            // تشغيل تدفق m3u8 عبر HLS.js
+            if (Hls.isSupported()) {
+                if (hls) hls.destroy();
+                hls = new Hls();
+                hls.loadSource(streamUrl);
+                hls.attachMedia(video);
+                hls.on(Hls.Events.MANIFEST_PARSED, function() {
+                    log.innerText = `✅ البث الخام يعمل بنجاح وبدون إعلانات: ${data.title}`;
                     video.play().catch(() => {
-                        log.innerText = `▶️ اضغط زر التشغيل في المشغل لبدء العرض`;
+                        log.innerText = `▶️ اضغط زر التشغيل (Play) في المشغل للبدء`;
                     });
-                };
+                });
+                hls.on(Hls.Events.ERROR, function(event, errData) {
+                    if (errData.fatal) {
+                        log.innerText = "⚠️ خطأ في قراءة ملف البث الخام.";
+                    }
+                });
+            } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                video.src = streamUrl;
+                video.addEventListener('loadedmetadata', function() {
+                    video.play();
+                });
             }
 
         } catch (err) {
