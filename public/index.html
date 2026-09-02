@@ -1,58 +1,68 @@
-// api/stream.js - خادم التوزيع وسد النواقص التلقائي
-export default async function handler(req, res) {
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    const { id, type = 'movie', s = 1, e = 1 } = req.query;
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>مشغل الدمج الذكي</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, sans-serif; }
+        body { background: #0b0c10; color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; padding: 15px; }
+        .container { width: 100%; max-width: 900px; display: flex; flex-direction: column; gap: 12px; }
+        .controls { display: flex; gap: 8px; background: #14161d; padding: 10px; border-radius: 8px; flex-wrap: wrap; }
+        input, select, button { padding: 10px 14px; border-radius: 6px; border: 1px solid #2d3748; background: #1f2833; color: #fff; font-size: 14px; }
+        input { flex: 2; min-width: 120px; }
+        select { flex: 1; }
+        button { background: #45f3ff; color: #000; font-weight: bold; border: none; cursor: pointer; }
+        .player-box { width: 100%; aspect-ratio: 16 / 9; background: #000; border-radius: 10px; overflow: hidden; box-shadow: 0 10px 25px rgba(0,0,0,0.8); }
+        iframe { width: 100%; height: 100%; border: none; }
+        #status { font-size: 13px; color: #45f3ff; text-align: center; }
+    </style>
+</head>
+<body>
 
-    if (!id) return res.status(400).json({ error: "TMDB ID مطلوب" });
+<div class="container">
+    <div class="controls">
+        <input type="text" id="mediaId" value="129" placeholder="TMDB ID">
+        <select id="mediaType">
+            <option value="movie">فيلم</option>
+            <option value="tv">مسلسل</option>
+        </select>
+        <button onclick="fetchUnifiedStream()">تشغيل العمل</button>
+    </div>
 
-    // مصفوفة محركات السحب والتحقق
-    const resolvers = [
-        // محرك 1: مخصص للأعمال الآسيوية والتركي والأنمي
-        async () => {
-            const url = `https://vidsrc.stream/api/source/${id}`;
-            const r = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
-            if (!r.ok) return null;
-            const data = await r.json();
-            return data?.url ? { stream: data.url, provider: 'Asian/Anime Engine' } : null;
-        },
-        // محرك 2: مخصص للمحتوى العالمي الحديث
-        async () => {
-            const endpoint = type === 'movie'
-                ? `https://api.consumet.org/movies/flixhq/watch?episodeId=${id}`
-                : `https://api.consumet.org/movies/flixhq/watch?episodeId=${id}&season=${s}&episode=${e}`;
-            const r = await fetch(endpoint);
-            if (!r.ok) return null;
-            const data = await r.json();
-            const source = data.sources?.find(x => x.quality === 'auto') || data.sources?.[0];
-            return source?.url ? { stream: source.url, subtitles: data.subtitles, provider: 'Global HD' } : null;
-        },
-        // محرك 3: الاحتياطي الشامل لسد أي نقص متبقٍ
-        async () => {
-            const r = await fetch(`https://embed.su/api/stream/${type}/${id}`);
-            if (!r.ok) return null;
-            const data = await r.json();
-            return data?.stream ? { stream: data.stream, provider: 'Archive Core' } : null;
-        }
-    ];
+    <div class="player-box">
+        <iframe id="videoPlayer" src="" allowfullscreen allow="autoplay; encrypted-media; fullscreen"></iframe>
+    </div>
 
-    // تشغيل منطق التوزيع التكاملي:
-    // يفحص المصادر بالترتيب؛ أول مصدر يحتوي على الملف يسحبه فوراً
-    for (const resolve of resolvers) {
+    <div id="status">النظام بانتظار أمر التشغيل...</div>
+</div>
+
+<script>
+    async function fetchUnifiedStream() {
+        const id = document.getElementById('mediaId').value.trim();
+        const type = document.getElementById('mediaType').value;
+        const player = document.getElementById('videoPlayer');
+        const status = document.getElementById('status');
+
+        status.innerText = "🔍 الخادم يدمج المصادر ويختار السيرفر المتوفر...";
+        player.src = "";
+
         try {
-            const result = await resolve();
-            if (result && result.stream) {
-                return res.status(200).json({
-                    success: true,
-                    streamUrl: result.stream,
-                    subtitles: result.subtitles || [],
-                    activeProvider: result.provider
-                });
+            const res = await fetch(`/api/stream?id=${id}&type=${type}`);
+            const data = await res.json();
+
+            if (data.embedUrl) {
+                player.src = data.embedUrl;
+                status.innerText = `✅ تم اختيار وتشغيل: ${data.provider}`;
+            } else {
+                status.innerText = "❌ تعذر العثور على العمل.";
             }
-        } catch (err) {
-            // المصدر لا يملك العمل أو تعطل؟ ينتقل للمصدر المكمل له فوراً دون مقاطعة
-            continue;
+        } catch (e) {
+            status.innerText = "⚠️ خطأ في الاتصال بالخادم: " + e.message;
         }
     }
 
-    return res.status(404).json({ success: false, error: "العمل غير متوفر في جميع المصادر المدمجة." });
-}
+    window.onload = fetchUnifiedStream;
+</script>
+</body>
+</html>
