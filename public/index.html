@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>مشغل الفحص والدمج الذكي</title>
+    <title>منظومة البث التلقائي الذكية</title>
     <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, sans-serif; }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, -apple-system, sans-serif; }
         body { background: #0b0c10; color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; padding: 15px; }
         .container { width: 100%; max-width: 900px; display: flex; flex-direction: column; gap: 12px; }
         .controls { display: flex; gap: 8px; background: #14161d; padding: 12px; border-radius: 8px; flex-wrap: wrap; }
@@ -23,14 +23,14 @@
 
 <div class="container">
     <div class="controls">
-        <input type="text" id="mediaId" value="550" placeholder="TMDB ID (مثال: 550 لفيلم)">
+        <input type="text" id="mediaId" value="129" placeholder="TMDB ID">
         <select id="mediaType" onchange="toggleEpInputs()">
             <option value="movie">فيلم (Movie)</option>
             <option value="tv">مسلسل (TV Show)</option>
         </select>
         <input type="number" id="seasonNum" placeholder="الموسم" value="1" style="display:none; max-width: 75px;">
         <input type="number" id="episodeNum" placeholder="الحلقة" value="1" style="display:none; max-width: 75px;">
-        <button onclick="startSmartAggregation()">تشغيل العمل</button>
+        <button onclick="detectAndRouteStream()">تشغيل العمل</button>
     </div>
 
     <div class="player-box">
@@ -38,41 +38,58 @@
     </div>
 
     <div class="status-bar">
-        <div id="statusText">جاهز...</div>
-        <button onclick="forceNextSource()" style="background:transparent; border:1px solid #45f3ff; color:#45f3ff; font-size:11px; padding:4px 8px; border-radius:4px; cursor:pointer;">سيرفر بديل ⏭️</button>
+        <div id="statusText">جاري الفحص التلقائي...</div>
+        <button onclick="nextServerFallback()" style="background:transparent; border:1px solid #45f3ff; color:#45f3ff; font-size:12px; padding:5px 10px; border-radius:4px; cursor:pointer;">سيرفر بديل ⏭️</button>
     </div>
 </div>
 
 <script>
-    // مصادر موثوقة ومفتوحة للتشغيل المباشر
-    const sources = [
-        {
-            name: "سيرفر VidLink HD",
-            build: (t, id, s, e) => t === 'movie' 
-                ? `https://vidlink.pro/movie/${id}` 
-                : `https://vidlink.pro/tv/${id}/${s}/${e}`
-        },
-        {
-            name: "سيرفر AutoEmbed Global",
-            build: (t, id, s, e) => t === 'movie' 
-                ? `https://player.autoembed.cc/embed/movie/${id}` 
-                : `https://player.autoembed.cc/embed/tv/${id}/${s}/${e}`
-        },
-        {
-            name: "سيرفر SmashyStream Multi",
-            build: (t, id, s, e) => t === 'movie' 
-                ? `https://player.smashystream.xyz/movie/${id}` 
-                : `https://player.smashystream.xyz/tv/${id}?s=${s}&e=${e}`
-        },
-        {
-            name: "سيرفر 2Embed Archive",
-            build: (t, id, s, e) => t === 'movie' 
-                ? `https://www.2embed.cc/embed/${id}` 
-                : `https://www.2embed.cc/embedtv/${id}&s=${s}&e=${e}`
-        }
-    ];
+    // مصفوفة المصادر
+    const serverPool = {
+        asian: [
+            {
+                name: "سيرفر SuperEmbed (شامل للأنمي والكوري)",
+                build: (t, id, s, e) => t === 'movie' 
+                    ? `https://multiembed.mov/?video_id=${id}&tmdb=1` 
+                    : `https://multiembed.mov/?video_id=${id}&tmdb=1&s=${s}&e=${e}`
+            },
+            {
+                name: "سيرفر 2Embed (مكتبة آسيوية ضخمة)",
+                build: (t, id, s, e) => t === 'movie' 
+                    ? `https://www.2embed.cc/embed/${id}` 
+                    : `https://www.2embed.cc/embedtv/${id}&s=${s}&e=${e}`
+            },
+            {
+                name: "سيرفر AutoEmbed Multi",
+                build: (t, id, s, e) => t === 'movie' 
+                    ? `https://player.autoembed.cc/embed/movie/${id}` 
+                    : `https://player.autoembed.cc/embed/tv/${id}/${s}/${e}`
+            }
+        ],
+        global: [
+            {
+                name: "سيرفر VidLink HD (عالمي سريع)",
+                build: (t, id, s, e) => t === 'movie' 
+                    ? `https://vidlink.pro/movie/${id}` 
+                    : `https://vidlink.pro/tv/${id}/${s}/${e}`
+            },
+            {
+                name: "سيرفر Smashy Multi",
+                build: (t, id, s, e) => t === 'movie' 
+                    ? `https://player.smashystream.xyz/movie/${id}` 
+                    : `https://player.smashystream.xyz/tv/${id}?s=${s}&e=${e}`
+            },
+            {
+                name: "سيرفر AutoEmbed Global",
+                build: (t, id, s, e) => t === 'movie' 
+                    ? `https://player.autoembed.cc/embed/movie/${id}` 
+                    : `https://player.autoembed.cc/embed/tv/${id}/${s}/${e}`
+            }
+        ]
+    };
 
-    let currentSourceIndex = 0;
+    let activeQueue = [];
+    let queueIndex = 0;
 
     function toggleEpInputs() {
         const isTv = document.getElementById('mediaType').value === 'tv';
@@ -80,12 +97,40 @@
         document.getElementById('episodeNum').style.display = isTv ? 'block' : 'none';
     }
 
-    function startSmartAggregation() {
-        currentSourceIndex = 0;
-        loadActiveStream();
+    async function detectAndRouteStream() {
+        const id = document.getElementById('mediaId').value.trim();
+        const type = document.getElementById('mediaType').value;
+        const status = document.getElementById('statusText');
+
+        if (!id) return;
+
+        status.innerText = "⏳ جاري فحص نوع العمل ولغته الأصلية...";
+
+        try {
+            // جلب معلومات العمل من TMDB
+            const res = await fetch(`https://api.themoviedb.org/3/${type}/${id}?api_key=42898950d8ce08e496a9cf1c26569ec5&language=ar`);
+            const data = await res.json();
+            const lang = data.original_language || 'en';
+
+            // إذا كان أنمي أو عملاً آسيوياً أو تركياً:
+            if (['ja', 'ko', 'zh', 'tr'].includes(lang)) {
+                activeQueue = [...serverPool.asian, ...serverPool.global];
+            } else {
+                activeQueue = [...serverPool.global, ...serverPool.asian];
+            }
+
+            queueIndex = 0;
+            renderCurrentSource(data.title || data.name || id);
+
+        } catch (err) {
+            // في حال فشل الفحص، تشغيل القائمة الشاملة افتراضياً
+            activeQueue = [...serverPool.asian, ...serverPool.global];
+            queueIndex = 0;
+            renderCurrentSource(id);
+        }
     }
 
-    function loadActiveStream() {
+    function renderCurrentSource(title) {
         const id = document.getElementById('mediaId').value.trim();
         const type = document.getElementById('mediaType').value;
         const s = document.getElementById('seasonNum').value || 1;
@@ -93,21 +138,20 @@
         const player = document.getElementById('videoPlayer');
         const status = document.getElementById('statusText');
 
-        if (!id) return;
-
-        const srcObj = sources[currentSourceIndex];
-        status.innerHTML = `المصدر النشط: <span class="badge">${srcObj.name}</span> [${currentSourceIndex + 1}/${sources.length}]`;
-        player.src = srcObj.build(type, id, s, e);
+        const currentSource = activeQueue[queueIndex];
+        status.innerHTML = `العمل: <strong>${title}</strong> | المصدر: <span class="badge">${currentSource.name}</span> [${queueIndex + 1}/${activeQueue.length}]`;
+        player.src = currentSource.build(type, id, s, e);
     }
 
-    function forceNextSource() {
-        currentSourceIndex = (currentSourceIndex + 1) % sources.length;
-        loadActiveStream();
+    function nextServerFallback() {
+        if (activeQueue.length === 0) return;
+        queueIndex = (queueIndex + 1) % activeQueue.length;
+        renderCurrentSource(document.getElementById('mediaId').value.trim());
     }
 
     window.onload = () => {
         toggleEpInputs();
-        startSmartAggregation();
+        detectAndRouteStream();
     };
 </script>
 </body>
