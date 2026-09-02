@@ -1,58 +1,58 @@
-// api/stream.js
+// api/stream.js - خادم التوزيع وسد النواقص التلقائي
 export default async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Origin', '*');
-    const { id, type = 'movie', s = '1', e = '1' } = req.query;
+    const { id, type = 'movie', s = 1, e = 1 } = req.query;
 
-    if (!id) return res.status(400).json({ error: "Missing ID" });
+    if (!id) return res.status(400).json({ error: "TMDB ID مطلوب" });
 
-    // مصفوفة المصادر المفحوصة
-    const sources = [
-        {
-            name: "Videasy",
-            url: type === 'movie' 
-                ? `https://player.videasy.net/movie/${id}`
-                : `https://player.videasy.net/tv/${id}/${s}/${e}`
+    // مصفوفة محركات السحب والتحقق
+    const resolvers = [
+        // محرك 1: مخصص للأعمال الآسيوية والتركي والأنمي
+        async () => {
+            const url = `https://vidsrc.stream/api/source/${id}`;
+            const r = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+            if (!r.ok) return null;
+            const data = await r.json();
+            return data?.url ? { stream: data.url, provider: 'Asian/Anime Engine' } : null;
         },
-        {
-            name: "VidLink",
-            url: type === 'movie'
-                ? `https://vidlink.pro/movie/${id}`
-                : `https://vidlink.pro/tv/${id}/${s}/${e}`
+        // محرك 2: مخصص للمحتوى العالمي الحديث
+        async () => {
+            const endpoint = type === 'movie'
+                ? `https://api.consumet.org/movies/flixhq/watch?episodeId=${id}`
+                : `https://api.consumet.org/movies/flixhq/watch?episodeId=${id}&season=${s}&episode=${e}`;
+            const r = await fetch(endpoint);
+            if (!r.ok) return null;
+            const data = await r.json();
+            const source = data.sources?.find(x => x.quality === 'auto') || data.sources?.[0];
+            return source?.url ? { stream: source.url, subtitles: data.subtitles, provider: 'Global HD' } : null;
         },
-        {
-            name: "Smashy",
-            url: type === 'movie'
-                ? `https://player.smashystream.xyz/movie/${id}`
-                : `https://player.smashystream.xyz/tv/${id}?s=${s}&e=${e}`
+        // محرك 3: الاحتياطي الشامل لسد أي نقص متبقٍ
+        async () => {
+            const r = await fetch(`https://embed.su/api/stream/${type}/${id}`);
+            if (!r.ok) return null;
+            const data = await r.json();
+            return data?.stream ? { stream: data.stream, provider: 'Archive Core' } : null;
         }
     ];
 
-    // الفحص التلقائي: الباك إند يجرب المصادر بالترتيب ويعيد أول مصدر سليم
-    for (const src of sources) {
+    // تشغيل منطق التوزيع التكاملي:
+    // يفحص المصادر بالترتيب؛ أول مصدر يحتوي على الملف يسحبه فوراً
+    for (const resolve of resolvers) {
         try {
-            const check = await fetch(src.url, { 
-                method: 'HEAD',
-                headers: { 'User-Agent': 'Mozilla/5.0' }
-            });
-
-            // إذا استجاب السيرفر بنجاح ولم يرجع 404 أو حظر
-            if (check.ok && check.status !== 404) {
+            const result = await resolve();
+            if (result && result.stream) {
                 return res.status(200).json({
                     success: true,
-                    provider: src.name,
-                    embedUrl: src.url
+                    streamUrl: result.stream,
+                    subtitles: result.subtitles || [],
+                    activeProvider: result.provider
                 });
             }
         } catch (err) {
-            // في حال فشل الاتصال ينتقل للمصدر التالي فوراً
+            // المصدر لا يملك العمل أو تعطل؟ ينتقل للمصدر المكمل له فوراً دون مقاطعة
             continue;
         }
     }
 
-    // إذا فشل الفحص السريع يرجع المصدر الأكثر شمولاً كخيار أخير
-    return res.status(200).json({
-        success: true,
-        provider: "Fallback",
-        embedUrl: sources[0].url
-    });
+    return res.status(404).json({ success: false, error: "العمل غير متوفر في جميع المصادر المدمجة." });
 }
