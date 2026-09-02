@@ -3,7 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>مشغل استخراج البث الخام</title>
+    <title>مشغل البث الخام المباشر</title>
+    <!-- مكتبة HLS لدعم البث الخام بصيغ m3u8 و mp4 -->
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, sans-serif; }
         body { background: #0b0c10; color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; padding: 15px; }
@@ -11,8 +13,8 @@
         .search-row { display: flex; gap: 8px; background: #14161d; padding: 12px; border-radius: 8px; }
         input { flex: 1; padding: 10px 14px; border-radius: 6px; border: 1px solid #2d3748; background: #1f2833; color: #fff; font-size: 14px; outline: none; }
         button { padding: 10px 20px; background: #45f3ff; color: #000; font-weight: bold; border: none; border-radius: 6px; cursor: pointer; }
-        .video-box { width: 100%; aspect-ratio: 16 / 9; background: #000; border-radius: 10px; overflow: hidden; box-shadow: 0 10px 25px rgba(0,0,0,0.8); }
-        video { width: 100%; height: 100%; outline: none; }
+        .video-box { position: relative; width: 100%; aspect-ratio: 16 / 9; background: #000; border-radius: 10px; overflow: hidden; box-shadow: 0 10px 25px rgba(0,0,0,0.8); }
+        video { width: 100%; height: 100%; object-fit: contain; }
         #log { font-size: 13px; color: #45f3ff; text-align: center; }
     </style>
 </head>
@@ -20,45 +22,82 @@
 
 <div class="container">
     <div class="search-row">
-        <input type="text" id="queryInput" value="Spirited Away" placeholder="اكتب اسم الفيلم أو الأنمي...">
-        <button onclick="requestRawStream()">سحب وتشغيل</button>
+        <input type="text" id="queryInput" value="Spirited Away" placeholder="اكتب اسم العمل...">
+        <button onclick="requestRawStream()">سحب وتشغيل 🎬</button>
     </div>
 
     <div class="video-box">
-        <video id="directPlayer" controls playsinline></video>
+        <video id="directPlayer" controls playsinline preload="auto"></video>
     </div>
 
-    <div id="log">جاهز للاتصال المباشر...</div>
+    <div id="log">اضغط "سحب وتشغيل" لبدء البث المباشر...</div>
 </div>
 
 <script>
+    let hlsInstance = null;
+
     async function requestRawStream() {
         const title = document.getElementById('queryInput').value.trim();
-        const player = document.getElementById('directPlayer');
+        const video = document.getElementById('directPlayer');
         const log = document.getElementById('log');
 
         if (!title) return;
 
-        log.innerText = `⏳ الخادم يستخرج ملف الفيديو الخام لـ (${title})...`;
-        player.pause();
+        log.innerText = `⏳ جاري الاتصال بالخادم واستخراج الرابط لـ (${title})...`;
+
+        // إيقاف أي بث سابق وتنظيف الذاكرة
+        if (hlsInstance) {
+            hlsInstance.destroy();
+            hlsInstance = null;
+        }
+        video.pause();
+        video.removeAttribute('src');
+        video.load();
 
         try {
             const res = await fetch(`/api/extract?title=${encodeURIComponent(title)}`);
             const data = await res.json();
 
-            if (data.success && data.streamUrl) {
-                player.src = data.streamUrl;
-                player.play();
-                log.innerText = `✅ تم استخراج الرابط المباشر وتشغيله بنجاح: ${data.title}`;
-            } else {
-                log.innerText = "❌ تعذر استخراج رابط مباشر للعمل المطلوب.";
+            if (!data.success || !data.streamUrl) {
+                log.innerText = "❌ تعذر استخراج رابط مباشر.";
+                return;
             }
+
+            const streamUrl = data.streamUrl;
+            log.innerText = `✅ تم استخراج الرابط المباشر، جاري التهيئة...`;
+
+            // معالجة تشغيل الروابط بحسب نوعها (HLS أو MP4)
+            if (streamUrl.includes('.m3u8')) {
+                if (Hls.isSupported()) {
+                    hlsInstance = new Hls();
+                    hlsInstance.loadSource(streamUrl);
+                    hlsInstance.attachMedia(video);
+                    hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
+                        log.innerText = `✅ البث المباشر يعمل بنجاح: ${data.title}`;
+                        video.play().catch(() => {
+                            log.innerText = `▶️ اضغط زر التشغيل في المشغل لبدء العرض`;
+                        });
+                    });
+                } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                    video.src = streamUrl;
+                    video.play().catch(() => {});
+                }
+            } else {
+                // إذا كان رابط MP4 مباشر
+                video.src = streamUrl;
+                video.load();
+                video.oncanplay = () => {
+                    log.innerText = `✅ الفيديو جاهز: ${data.title}`;
+                    video.play().catch(() => {
+                        log.innerText = `▶️ اضغط زر التشغيل في المشغل لبدء العرض`;
+                    });
+                };
+            }
+
         } catch (err) {
             log.innerText = "⚠️ حدث خطأ في الاتصال: " + err.message;
         }
     }
-
-    window.onload = requestRawStream;
 </script>
 </body>
 </html>
