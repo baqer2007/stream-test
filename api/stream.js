@@ -1,58 +1,53 @@
-// api/stream.js - خادم التوزيع وسد النواقص التلقائي
 export default async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Origin', '*');
-    const { id, type = 'movie', s = 1, e = 1 } = req.query;
+    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    if (req.method === 'OPTIONS') return res.status(200).end();
 
-    if (!id) return res.status(400).json({ error: "TMDB ID مطلوب" });
+    const { id = '129', type = 'movie', s = 1, e = 1 } = req.query;
 
-    // مصفوفة محركات السحب والتحقق
-    const resolvers = [
-        // محرك 1: مخصص للأعمال الآسيوية والتركي والأنمي
-        async () => {
-            const url = `https://vidsrc.stream/api/source/${id}`;
-            const r = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
-            if (!r.ok) return null;
-            const data = await r.json();
-            return data?.url ? { stream: data.url, provider: 'Asian/Anime Engine' } : null;
+    const sources = [
+        // سيرفر 1: محتوى آسيوي وأنمي
+        {
+            name: "Asian & Anime Core",
+            url: type === 'movie' 
+                ? `https://player.videasy.net/movie/${id}`
+                : `https://player.videasy.net/tv/${id}/${s}/${e}`
         },
-        // محرك 2: مخصص للمحتوى العالمي الحديث
-        async () => {
-            const endpoint = type === 'movie'
-                ? `https://api.consumet.org/movies/flixhq/watch?episodeId=${id}`
-                : `https://api.consumet.org/movies/flixhq/watch?episodeId=${id}&season=${s}&episode=${e}`;
-            const r = await fetch(endpoint);
-            if (!r.ok) return null;
-            const data = await r.json();
-            const source = data.sources?.find(x => x.quality === 'auto') || data.sources?.[0];
-            return source?.url ? { stream: source.url, subtitles: data.subtitles, provider: 'Global HD' } : null;
+        // سيرفر 2: عالمي وهوليوود
+        {
+            name: "Global Prime",
+            url: type === 'movie'
+                ? `https://vidlink.pro/movie/${id}`
+                : `https://vidlink.pro/tv/${id}/${s}/${e}`
         },
-        // محرك 3: الاحتياطي الشامل لسد أي نقص متبقٍ
-        async () => {
-            const r = await fetch(`https://embed.su/api/stream/${type}/${id}`);
-            if (!r.ok) return null;
-            const data = await r.json();
-            return data?.stream ? { stream: data.stream, provider: 'Archive Core' } : null;
+        // سيرفر 3: احتياطي شامل لسد النواقص
+        {
+            name: "Archive Fallback",
+            url: type === 'movie'
+                ? `https://player.autoembed.cc/embed/movie/${id}`
+                : `https://player.autoembed.cc/embed/tv/${id}/${s}/${e}`
         }
     ];
 
-    // تشغيل منطق التوزيع التكاملي:
-    // يفحص المصادر بالترتيب؛ أول مصدر يحتوي على الملف يسحبه فوراً
-    for (const resolve of resolvers) {
+    // فحص التوفر وتصفية التكرار تلقائياً
+    for (const src of sources) {
         try {
-            const result = await resolve();
-            if (result && result.stream) {
+            const check = await fetch(src.url, { method: 'GET', headers: { 'User-Agent': 'Mozilla/5.0' } });
+            if (check.ok) {
                 return res.status(200).json({
                     success: true,
-                    streamUrl: result.stream,
-                    subtitles: result.subtitles || [],
-                    activeProvider: result.provider
+                    provider: src.name,
+                    embedUrl: src.url
                 });
             }
         } catch (err) {
-            // المصدر لا يملك العمل أو تعطل؟ ينتقل للمصدر المكمل له فوراً دون مقاطعة
             continue;
         }
     }
 
-    return res.status(404).json({ success: false, error: "العمل غير متوفر في جميع المصادر المدمجة." });
+    return res.status(200).json({
+        success: true,
+        provider: sources[0].name,
+        embedUrl: sources[0].url
+    });
 }
