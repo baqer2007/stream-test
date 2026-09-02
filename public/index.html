@@ -39,33 +39,40 @@
     </div>
 
     <div class="routing-bar">
-        <div id="routingInfo">النظام التكاملي: بانتظار إدخال العمل...</div>
-        <button class="switch-btn" onclick="nextFallbackSource()">العمل غير متوفر؟ التبديل للمصدر المكمّل ⏭️</button>
+        <div id="routingInfo">النظام التكاملي: جاري توجيه السيرفر وتفعيل الترجمة...</div>
+        <button class="switch-btn" onclick="nextFallbackSource()">التبديل للمصدر المكمّل ⏭️</button>
     </div>
 </div>
 
 <script>
-    // 1. مصفوفة المصادر الكاملة
+    // تضمين باراميترات فرض الترجمة العربية وتفعيل المشغل النظيف تلقائياً
     const providers = {
         videasy: {
-            name: "Videasy (متخصص بالآسيوي والأنمي والتركي)",
-            build: (t, id, s, e) => t === 'movie' ? `https://player.videasy.net/movie/${id}` : `https://player.videasy.net/tv/${id}/${s}/${e}`
-        },
-        vidlink: {
-            name: "VidLink (متخصص بالعالمي وهوليوود)",
-            build: (t, id, s, e) => t === 'movie' ? `https://vidlink.pro/movie/${id}` : `https://vidlink.pro/tv/${id}/${s}/${e}`
+            name: "Videasy (شامل للأنمي والآسيوي + ترجمة)",
+            build: (t, id, s, e) => t === 'movie' 
+                ? `https://player.videasy.net/movie/${id}?sub=ar` 
+                : `https://player.videasy.net/tv/${id}/${s}/${e}?sub=ar`
         },
         autoembed: {
-            name: "AutoEmbed (المخزون الاحتياطي الشامل)",
-            build: (t, id, s, e) => t === 'movie' ? `https://player.autoembed.cc/embed/movie/${id}` : `https://player.autoembed.cc/embed/tv/${id}/${s}/${e}`
+            name: "AutoEmbed Multi (يدعم العربية تلقائياً)",
+            build: (t, id, s, e) => t === 'movie' 
+                ? `https://player.autoembed.cc/embed/movie/${id}` 
+                : `https://player.autoembed.cc/embed/tv/${id}/${s}/${e}`
         },
-        embed2: {
-            name: "2Embed (متخصص بالأعمال القديمة والكلاسيكية)",
-            build: (t, id, s, e) => t === 'movie' ? `https://www.2embed.cc/embed/${id}` : `https://www.2embed.cc/embedtv/${id}&s=${s}&e=${e}`
+        embedsu: {
+            name: "EmbedSu (ترجمة مدمجة تلقائية)",
+            build: (t, id, s, e) => t === 'movie' 
+                ? `https://embed.su/embed/movie/${id}` 
+                : `https://embed.su/embed/tv/${id}/${s}/${e}`
+        },
+        vidlink: {
+            name: "VidLink (عالمي حديث)",
+            build: (t, id, s, e) => t === 'movie' 
+                ? `https://vidlink.pro/movie/${id}?sub=ar` 
+                : `https://vidlink.pro/tv/${id}/${s}/${e}?sub=ar`
         }
     };
 
-    // سلسلة السيرفرات النشطة للعمل الحالي
     let activeChain = [];
     let currentChainIndex = 0;
 
@@ -75,38 +82,33 @@
         document.getElementById('episodeNum').style.display = isTv ? 'block' : 'none';
     }
 
-    // منطق الفرز التكاملي ومنع التضارب:
     async function routeSmartPlayback() {
         const id = document.getElementById('mediaId').value.trim();
         const type = document.getElementById('mediaType').value;
         const status = document.getElementById('routingInfo');
 
-        status.innerText = "🔍 جاري فحص هوية العمل وتحديد السيرفر الأنسب...";
+        status.innerText = "🔍 جاري فحص نوع العمل واختيار السيرفر المخصص...";
 
         try {
-            // الاستعلام عن معلومات العمل من TMDB لتحديد لغته ونوعه
-            const tmdbRes = await fetch(`https://api.themoviedb.org/3/${type}/${id}?api_key=15d2ade7f4a5e33cb35e23f502ce4e16`);
-            const meta = await tmdbRes.json();
-            const lang = meta.original_language || 'en';
+            // استعلام مباشر وسريع لجلب بيانات العمل وتحديد لغته
+            const res = await fetch(`https://api.themoviedb.org/3/${type}/${id}?api_key=42898950d8ce08e496a9cf1c26569ec5&language=ar`);
+            const data = await res.json();
+            const lang = data.original_language || 'en';
 
-            // ترتيب السيرفرات حسب هوية المحتوى لتجنب التضارب وسد النقص:
-            if (lang === 'ja' || lang === 'ko' || lang === 'zh' || lang === 'tr') {
-                // إذا كان أنمي، كوري، أو تركي -> نبدأ بـ Videasy أولاً
-                activeChain = [providers.videasy, providers.autoembed, providers.embed2, providers.vidlink];
-            } else if (meta.release_date && parseInt(meta.release_date.substring(0,4)) < 2015) {
-                // إذا كان عملاً قديماً -> نبدأ بـ 2Embed المتخصص بالأرشيف
-                activeChain = [providers.embed2, providers.autoembed, providers.vidlink, providers.videasy];
+            // إذا كان العمل أنمي أو كوري أو تركي أو آسيوي:
+            if (['ja', 'ko', 'zh', 'tr'].includes(lang)) {
+                activeChain = [providers.videasy, providers.autoembed, providers.embedsu, providers.vidlink];
             } else {
-                // إذا كان عملاً عالمياً حديثاً -> نبدأ بـ VidLink
-                activeChain = [providers.vidlink, providers.autoembed, providers.videasy, providers.embed2];
+                // للأعمال العالمية وهوليوود:
+                activeChain = [providers.autoembed, providers.embedsu, providers.videasy, providers.vidlink];
             }
 
             currentChainIndex = 0;
-            displayCurrentSource(meta.title || meta.name || id);
+            displayCurrentSource(data.title || data.name || id);
 
         } catch (e) {
-            // في حال تعذر جلب البيانات الوصفية، نعتمد الترتيب الافتراضي المتوازن
-            activeChain = [providers.videasy, providers.vidlink, providers.autoembed, providers.embed2];
+            // في حال حدوث أي حجب للـ API نضع السيرفر الأكثر شمولاً أولاً تلقائياً
+            activeChain = [providers.videasy, providers.autoembed, providers.embedsu, providers.vidlink];
             currentChainIndex = 0;
             displayCurrentSource(id);
         }
@@ -123,10 +125,9 @@
         const currentProvider = activeChain[currentChainIndex];
         player.src = currentProvider.build(type, id, s, e);
 
-        status.innerHTML = `العمل: <strong style="color:#fff;">${title}</strong> | المصدر الحالي: <strong style="color:#45f3ff;">${currentProvider.name}</strong> [${currentChainIndex + 1}/${activeChain.length}]`;
+        status.innerHTML = `العمل: <strong style="color:#fff;">${title}</strong> | المصدر: <strong style="color:#45f3ff;">${currentProvider.name}</strong> [${currentChainIndex + 1}/${activeChain.length}]`;
     }
 
-    // الانتقال للسيرفر التالي في السلسلة التكاملية عند نقص العمل
     function nextFallbackSource() {
         if (activeChain.length === 0) return;
         currentChainIndex = (currentChainIndex + 1) % activeChain.length;
