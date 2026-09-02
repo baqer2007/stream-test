@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>منظومة البث المدمجة مع الترجمة الفورية</title>
+    <title>مشغل البث المدمج مع الترجمة التلقائية</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, sans-serif; }
         body { background: #0b0c10; color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; padding: 15px; }
@@ -18,19 +18,19 @@
         .status-bar { display: flex; justify-content: space-between; align-items: center; font-size: 13px; color: #888; background: #14161d; padding: 10px 15px; border-radius: 8px; }
         .badge { color: #45f3ff; font-weight: bold; }
         .sub-bar { background: #14161d; padding: 10px 15px; border-radius: 8px; font-size: 13px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-        .sub-btn { background: #45f3ff; color: #000; font-weight: bold; padding: 6px 12px; border-radius: 4px; text-decoration: none; font-size: 12px; display: inline-block; }
+        .sub-btn { background: #45f3ff; color: #000; font-weight: bold; padding: 6px 12px; border-radius: 4px; text-decoration: none; font-size: 12px; }
     </style>
 </head>
 <body>
 
 <div class="container">
     <div class="controls">
-        <input type="text" id="mediaId" value="129" placeholder="TMDB ID">
+        <input type="text" id="mediaId" value="129" placeholder="معرّف TMDB (مثال: 129 أو 550)">
         <select id="mediaType">
             <option value="movie">فيلم (Movie)</option>
             <option value="tv">مسلسل (TV Show)</option>
         </select>
-        <button onclick="loadStream()">تشغيل العمل</button>
+        <button onclick="startAutoStream()">تشغيل العمل</button>
     </div>
 
     <div class="player-box">
@@ -38,59 +38,92 @@
     </div>
 
     <div class="status-bar">
-        <div id="statusText">جاهز للتشغيل...</div>
-        <button onclick="toggleServer()" style="background:transparent; border:1px solid #45f3ff; color:#45f3ff; font-size:12px; padding:4px 8px; border-radius:4px; cursor:pointer;">سيرفر مكمّل ⏭️</button>
+        <div id="statusText">جاري الفحص...</div>
+        <button onclick="switchServer()" style="background:transparent; border:1px solid #45f3ff; color:#45f3ff; font-size:12px; padding:4px 8px; border-radius:4px; cursor:pointer;">سيرفر مكمّل ⏭️</button>
     </div>
 
-    <!-- ميزة الترجمة المباشرة للأنمي والمحتوى الآسيوي -->
     <div class="sub-bar">
         <div>
-            <span>💬 للترجمة العربية المباشرة داخل المشغل:</span>
-            <span style="color:#aaa; font-size:11px; display:block;">انقر زر Subtitle في المشغل ثم Upload واختر ملف الترجمة الجاهز فوراً:</span>
+            <span id="mediaTitleLabel">الترجمة العربية للعمل:</span>
+            <span style="color:#aaa; font-size:11px; display:block;">البحث التلقائي عن ملفات الترجمة المتوافقة بدقة:</span>
         </div>
-        <a id="subDownloadLink" class="sub-btn" href="#" target="_blank">تحميل الترجمة العربية 📥</a>
+        <a id="subDownloadLink" class="sub-btn" href="#" target="_blank">جلب الترجمة العربية 📥</a>
     </div>
 </div>
 
 <script>
-    // المصادر التي تم التأكد من أنها لا تعطي شاشة رمادية
-    const workingServers = [
+    let currentImdbId = "";
+    let currentTitle = "";
+    let currentServerIndex = 0;
+
+    // مصادر تدعم معرفات TMDB و IMDb
+    const serverEngines = [
         {
-            name: "سيرفر SuperEmbed (يعمل بدون حظر)",
-            build: (t, id) => `https://multiembed.mov/?video_id=${id}&tmdb=1`
+            name: "سيرفر SuperEmbed VIP",
+            build: (type, tmdb, imdb) => `https://multiembed.mov/?video_id=${imdb || tmdb}&tmdb=1`
         },
         {
-            name: "سيرفر VidLink HD (عالمي سريع)",
-            build: (t, id) => t === 'movie' ? `https://vidlink.pro/movie/${id}` : `https://vidlink.pro/tv/${id}/1/1`
+            name: "سيرفر VidLink HD",
+            build: (type, tmdb, imdb) => type === 'movie' 
+                ? `https://vidlink.pro/movie/${tmdb}?sub=ar` 
+                : `https://vidlink.pro/tv/${tmdb}/1/1?sub=ar`
         }
     ];
 
-    let currentIdx = 0;
+    async function startAutoStream() {
+        const id = document.getElementById('mediaId').value.trim();
+        const type = document.getElementById('mediaType').value;
+        const status = document.getElementById('statusText');
+        const titleLabel = document.getElementById('mediaTitleLabel');
+        const subLink = document.getElementById('subDownloadLink');
 
-    function loadStream() {
+        if (!id) return;
+        status.innerText = "🔍 جاري استخراج بيانات العمل وربط الترجمة...";
+
+        try {
+            // جلب تفاصيل العمل ومعرف IMDb الرسمي
+            const res = await fetch(`https://api.themoviedb.org/3/${type}/${id}?api_key=42898950d8ce08e496a9cf1c26569ec5&language=en-US`);
+            const data = await res.json();
+
+            currentTitle = data.title || data.name || id;
+            currentImdbId = data.imdb_id || "";
+
+            // ضبط رابط الترجمة بالاعتماد على IMDb أو اسم العمل بدقة لتجنب خطأ (0 نتائج)
+            if (currentImdbId) {
+                subLink.href = `https://subdl.com/subtitle/${currentImdbId}`;
+            } else {
+                subLink.href = `https://subdl.com/search/${encodeURIComponent(currentTitle)}`;
+            }
+
+            titleLabel.innerText = `العمل: ${currentTitle} (${currentImdbId || 'TMDB: ' + id})`;
+            currentServerIndex = 0;
+            renderPlayer();
+
+        } catch (e) {
+            currentTitle = id;
+            currentImdbId = "";
+            subLink.href = `https://subdl.com/search/${id}`;
+            renderPlayer();
+        }
+    }
+
+    function renderPlayer() {
         const id = document.getElementById('mediaId').value.trim();
         const type = document.getElementById('mediaType').value;
         const player = document.getElementById('videoPlayer');
         const status = document.getElementById('statusText');
-        const subLink = document.getElementById('subDownloadLink');
 
-        if (!id) return;
-
-        // تشغيل السيرفر الفعّال
-        const active = workingServers[currentIdx];
-        status.innerHTML = `المصدر المفعّل: <span class="badge">${active.name}</span>`;
-        player.src = active.build(type, id);
-
-        // توفير رابط ترجمة عربي مباشر ومطابق للـ TMDB ID للتحميل بنقرة واحدة
-        subLink.href = `https://subdl.com/search?tmdb_id=${id}`;
+        const engine = serverEngines[currentServerIndex];
+        status.innerHTML = `المصدر المفعّل: <span class="badge">${engine.name}</span> [${currentServerIndex + 1}/${serverEngines.length}]`;
+        player.src = engine.build(type, id, currentImdbId);
     }
 
-    function toggleServer() {
-        currentIdx = (currentIdx + 1) % workingServers.length;
-        loadStream();
+    function switchServer() {
+        currentServerIndex = (currentServerIndex + 1) % serverEngines.length;
+        renderPlayer();
     }
 
-    window.onload = loadStream;
+    window.onload = startAutoStream;
 </script>
 </body>
 </html>
