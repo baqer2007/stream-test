@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>منظومة البث التلقائي الذكية</title>
     <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, -apple-system, sans-serif; }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, sans-serif; }
         body { background: #0b0c10; color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; padding: 15px; }
         .container { width: 100%; max-width: 900px; display: flex; flex-direction: column; gap: 12px; }
         .controls { display: flex; gap: 8px; background: #14161d; padding: 12px; border-radius: 8px; flex-wrap: wrap; }
@@ -38,55 +38,61 @@
     </div>
 
     <div class="status-bar">
-        <div id="statusText">جاري الفحص التلقائي...</div>
+        <div id="statusText">جاري التجهيز...</div>
         <button onclick="nextServerFallback()" style="background:transparent; border:1px solid #45f3ff; color:#45f3ff; font-size:12px; padding:5px 10px; border-radius:4px; cursor:pointer;">سيرفر بديل ⏭️</button>
     </div>
 </div>
 
 <script>
-    // مصفوفة المصادر
-    const serverPool = {
-        asian: [
-            {
-                name: "سيرفر SuperEmbed (شامل للأنمي والكوري)",
-                build: (t, id, s, e) => t === 'movie' 
-                    ? `https://multiembed.mov/?video_id=${id}&tmdb=1` 
-                    : `https://multiembed.mov/?video_id=${id}&tmdb=1&s=${s}&e=${e}`
-            },
-            {
-                name: "سيرفر 2Embed (مكتبة آسيوية ضخمة)",
-                build: (t, id, s, e) => t === 'movie' 
-                    ? `https://www.2embed.cc/embed/${id}` 
-                    : `https://www.2embed.cc/embedtv/${id}&s=${s}&e=${e}`
-            },
-            {
-                name: "سيرفر AutoEmbed Multi",
-                build: (t, id, s, e) => t === 'movie' 
-                    ? `https://player.autoembed.cc/embed/movie/${id}` 
-                    : `https://player.autoembed.cc/embed/tv/${id}/${s}/${e}`
-            }
-        ],
-        global: [
-            {
-                name: "سيرفر VidLink HD (عالمي سريع)",
-                build: (t, id, s, e) => t === 'movie' 
-                    ? `https://vidlink.pro/movie/${id}` 
-                    : `https://vidlink.pro/tv/${id}/${s}/${e}`
-            },
-            {
-                name: "سيرفر Smashy Multi",
-                build: (t, id, s, e) => t === 'movie' 
-                    ? `https://player.smashystream.xyz/movie/${id}` 
-                    : `https://player.smashystream.xyz/tv/${id}?s=${s}&e=${e}`
-            },
-            {
-                name: "سيرفر AutoEmbed Global",
-                build: (t, id, s, e) => t === 'movie' 
-                    ? `https://player.autoembed.cc/embed/movie/${id}` 
-                    : `https://player.autoembed.cc/embed/tv/${id}/${s}/${e}`
-            }
-        ]
-    };
+    // سيرفرات المحتوى الآسيوي والأنمي (تدعم الترجمة المدمجة والخيارات المتعددة)
+    const asianServers = [
+        {
+            name: "سيرفر AutoEmbed Multi (يدعم العربية)",
+            build: (t, id, s, e) => t === 'movie'
+                ? `https://player.autoembed.cc/embed/movie/${id}`
+                : `https://player.autoembed.cc/embed/tv/${id}/${s}/${e}`
+        },
+        {
+            name: "سيرفر SuperEmbed (خيارات جودة وسيرفرات داخلية)",
+            build: (t, id, s, e) => t === 'movie' 
+                ? `https://multiembed.mov/?video_id=${id}&tmdb=1` 
+                : `https://multiembed.mov/?video_id=${id}&tmdb=1&s=${s}&e=${e}`
+        },
+        {
+            name: "سيرفر Smashy Multi (مشغل أنمي بديل)",
+            build: (t, id, s, e) => t === 'movie' 
+                ? `https://player.smashystream.xyz/movie/${id}` 
+                : `https://player.smashystream.xyz/tv/${id}?s=${s}&e=${e}`
+        },
+        {
+            name: "سيرفر 2Embed Anime",
+            build: (t, id, s, e) => t === 'movie' 
+                ? `https://www.2embed.cc/embed/${id}` 
+                : `https://www.2embed.cc/embedtv/${id}&s=${s}&e=${e}`
+        }
+    ];
+
+    // سيرفرات المحتوى العالمي وهوليوود
+    const globalServers = [
+        {
+            name: "سيرفر VidLink HD",
+            build: (t, id, s, e) => t === 'movie' 
+                ? `https://vidlink.pro/movie/${id}?sub=ar` 
+                : `https://vidlink.pro/tv/${id}/${s}/${e}?sub=ar`
+        },
+        {
+            name: "سيرفر AutoEmbed Global",
+            build: (t, id, s, e) => t === 'movie' 
+                ? `https://player.autoembed.cc/embed/movie/${id}` 
+                : `https://player.autoembed.cc/embed/tv/${id}/${s}/${e}`
+        },
+        {
+            name: "سيرفر SuperEmbed VIP",
+            build: (t, id, s, e) => t === 'movie' 
+                ? `https://multiembed.mov/?video_id=${id}&tmdb=1` 
+                : `https://multiembed.mov/?video_id=${id}&tmdb=1&s=${s}&e=${e}`
+        }
+    ];
 
     let activeQueue = [];
     let queueIndex = 0;
@@ -103,28 +109,25 @@
         const status = document.getElementById('statusText');
 
         if (!id) return;
-
-        status.innerText = "⏳ جاري فحص نوع العمل ولغته الأصلية...";
+        status.innerText = "⏳ جاري فحص هوية العمل وتحديد المسار...";
 
         try {
-            // جلب معلومات العمل من TMDB
             const res = await fetch(`https://api.themoviedb.org/3/${type}/${id}?api_key=42898950d8ce08e496a9cf1c26569ec5&language=ar`);
             const data = await res.json();
             const lang = data.original_language || 'en';
 
-            // إذا كان أنمي أو عملاً آسيوياً أو تركياً:
+            // حصر السيرفرات بحسب التخصص دون خلط لتفادي أخطاء الحجب
             if (['ja', 'ko', 'zh', 'tr'].includes(lang)) {
-                activeQueue = [...serverPool.asian, ...serverPool.global];
+                activeQueue = asianServers;
             } else {
-                activeQueue = [...serverPool.global, ...serverPool.asian];
+                activeQueue = globalServers;
             }
 
             queueIndex = 0;
             renderCurrentSource(data.title || data.name || id);
 
         } catch (err) {
-            // في حال فشل الفحص، تشغيل القائمة الشاملة افتراضياً
-            activeQueue = [...serverPool.asian, ...serverPool.global];
+            activeQueue = asianServers;
             queueIndex = 0;
             renderCurrentSource(id);
         }
