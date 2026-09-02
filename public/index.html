@@ -3,139 +3,71 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>مشغل البث المدمج</title>
+    <title>منظومة البث التكاملية الذكية</title>
     <style>
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-            font-family: system-ui, -apple-system, sans-serif;
-        }
-        body {
-            background-color: #0b0c10;
-            color: #ffffff;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            min-height: 100vh;
-            padding: 15px;
-        }
-        .container {
-            width: 100%;
-            max-width: 900px;
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
-        }
-        .search-box {
-            display: flex;
-            gap: 10px;
-            background: #14161d;
-            padding: 12px;
-            border-radius: 10px;
-            border: 1px solid #1f2833;
-            flex-wrap: wrap;
-        }
-        input, select, button {
-            padding: 10px 14px;
-            border-radius: 6px;
-            border: 1px solid #2d3748;
-            background: #1f2833;
-            color: white;
-            font-size: 14px;
-            outline: none;
-        }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, -apple-system, sans-serif; }
+        body { background-color: #0b0c10; color: #ffffff; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; padding: 15px; }
+        .container { width: 100%; max-width: 900px; display: flex; flex-direction: column; gap: 15px; }
+        .search-box { display: flex; gap: 10px; background: #14161d; padding: 12px; border-radius: 10px; border: 1px solid #1f2833; flex-wrap: wrap; }
+        input, select, button { padding: 10px 14px; border-radius: 6px; border: 1px solid #2d3748; background: #1f2833; color: white; font-size: 14px; outline: none; }
         input { flex: 2; min-width: 140px; }
         select { flex: 1; min-width: 120px; }
-        button {
-            background-color: #45f3ff;
-            color: #0b0c10;
-            font-weight: bold;
-            cursor: pointer;
-            border: none;
-            flex: 1;
-            min-width: 100px;
-        }
-        .player-wrapper {
-            position: relative;
-            width: 100%;
-            aspect-ratio: 16 / 9;
-            border-radius: 12px;
-            overflow: hidden;
-            background: #000;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.8);
-        }
-        iframe {
-            width: 100%;
-            height: 100%;
-            border: none;
-        }
-        .status-badge {
-            font-size: 13px;
-            color: #45f3ff;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-        .status-badge span {
-            display: inline-block;
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background-color: #45f3ff;
-        }
+        button { background-color: #45f3ff; color: #0b0c10; font-weight: bold; cursor: pointer; border: none; flex: 1; min-width: 100px; }
+        .player-wrapper { position: relative; width: 100%; aspect-ratio: 16 / 9; border-radius: 12px; overflow: hidden; background: #000; box-shadow: 0 10px 30px rgba(0,0,0,0.8); }
+        iframe { width: 100%; height: 100%; border: none; }
+        .routing-bar { display: flex; justify-content: space-between; align-items: center; font-size: 13px; color: #888; background: #14161d; padding: 10px 15px; border-radius: 8px; flex-wrap: wrap; gap: 10px; }
+        .switch-btn { background: #1f2833; color: #45f3ff; border: 1px solid #45f3ff; padding: 6px 12px; font-size: 12px; border-radius: 6px; cursor: pointer; font-weight: bold; }
+        .switch-btn:hover { background: #45f3ff; color: #000; }
     </style>
 </head>
 <body>
 
 <div class="container">
     <div class="search-box">
-        <input type="text" id="mediaId" placeholder="معرّف TMDB (مثال: 550 أو 94605)" value="94605">
+        <input type="text" id="mediaId" placeholder="معرّف TMDB" value="129">
         <select id="mediaType" onchange="toggleInputs()">
-            <option value="tv">مسلسل (TV Show)</option>
             <option value="movie">فيلم (Movie)</option>
+            <option value="tv">مسلسل (TV Show)</option>
         </select>
-        <input type="number" id="seasonNum" placeholder="الموسم" value="1" style="max-width: 80px;">
-        <input type="number" id="episodeNum" placeholder="الحلقة" value="1" style="max-width: 80px;">
-        <button onclick="startUnifiedStream()">تشغيل العمل</button>
+        <input type="number" id="seasonNum" placeholder="الموسم" value="1" style="display:none; max-width: 80px;">
+        <input type="number" id="episodeNum" placeholder="الحلقة" value="1" style="display:none; max-width: 80px;">
+        <button onclick="routeSmartPlayback()">بدء التشغيل الذكي</button>
     </div>
 
-    <!-- واجهة مشغل واحدة بدون أزرار سيرفرات مبعثرة -->
     <div class="player-wrapper">
         <iframe id="unifiedPlayer" src="" allowfullscreen allow="autoplay; encrypted-media; fullscreen; picture-in-picture"></iframe>
     </div>
 
-    <div class="status-badge">
-        <span></span>
-        <div id="engineStatus">نظام الدمج الذكي: جاهز للاتصال</div>
+    <div class="routing-bar">
+        <div id="routingInfo">النظام التكاملي: بانتظار إدخال العمل...</div>
+        <button class="switch-btn" onclick="nextFallbackSource()">العمل غير متوفر؟ التبديل للمصدر المكمّل ⏭️</button>
     </div>
 </div>
 
 <script>
-    // قائمة السيرفرات المدمجة خلف الكواليس (تركي، آسيوي، وعالمي)
-    const integratedPool = [
-        {
-            name: "المصدر الرئيسي",
-            buildUrl: (t, id, s, e) => t === 'movie' 
-                ? `https://vidlink.pro/movie/${id}`
-                : `https://vidlink.pro/tv/${id}/${s}/${e}`
+    // 1. مصفوفة المصادر الكاملة
+    const providers = {
+        videasy: {
+            name: "Videasy (متخصص بالآسيوي والأنمي والتركي)",
+            build: (t, id, s, e) => t === 'movie' ? `https://player.videasy.net/movie/${id}` : `https://player.videasy.net/tv/${id}/${s}/${e}`
         },
-        {
-            name: "مصدر المحتوى الآسيوي والتركي",
-            buildUrl: (t, id, s, e) => t === 'movie'
-                ? `https://player.videasy.net/movie/${id}`
-                : `https://player.videasy.net/tv/${id}/${s}/${e}`
+        vidlink: {
+            name: "VidLink (متخصص بالعالمي وهوليوود)",
+            build: (t, id, s, e) => t === 'movie' ? `https://vidlink.pro/movie/${id}` : `https://vidlink.pro/tv/${id}/${s}/${e}`
         },
-        {
-            name: "المصدر الاحتياطي السريع",
-            buildUrl: (t, id, s, e) => t === 'movie'
-                ? `https://player.autoembed.cc/embed/movie/${id}`
-                : `https://player.autoembed.cc/embed/tv/${id}/${s}/${e}`
+        autoembed: {
+            name: "AutoEmbed (المخزون الاحتياطي الشامل)",
+            build: (t, id, s, e) => t === 'movie' ? `https://player.autoembed.cc/embed/movie/${id}` : `https://player.autoembed.cc/embed/tv/${id}/${s}/${e}`
+        },
+        embed2: {
+            name: "2Embed (متخصص بالأعمال القديمة والكلاسيكية)",
+            build: (t, id, s, e) => t === 'movie' ? `https://www.2embed.cc/embed/${id}` : `https://www.2embed.cc/embedtv/${id}&s=${s}&e=${e}`
         }
-    ];
+    };
 
-    let activePoolIndex = 0;
+    // سلسلة السيرفرات النشطة للعمل الحالي
+    let activeChain = [];
+    let currentChainIndex = 0;
 
     function toggleInputs() {
         const isTv = document.getElementById('mediaType').value === 'tv';
@@ -143,41 +75,67 @@
         document.getElementById('episodeNum').style.display = isTv ? 'block' : 'none';
     }
 
-    // منطق الدمج: اختيار وتشغيل المصدر تلقائياً دون إظهاره للمستخدم
-    function startUnifiedStream() {
-        activePoolIndex = 0;
-        loadNextAvailableSource();
+    // منطق الفرز التكاملي ومنع التضارب:
+    async function routeSmartPlayback() {
+        const id = document.getElementById('mediaId').value.trim();
+        const type = document.getElementById('mediaType').value;
+        const status = document.getElementById('routingInfo');
+
+        status.innerText = "🔍 جاري فحص هوية العمل وتحديد السيرفر الأنسب...";
+
+        try {
+            // الاستعلام عن معلومات العمل من TMDB لتحديد لغته ونوعه
+            const tmdbRes = await fetch(`https://api.themoviedb.org/3/${type}/${id}?api_key=15d2ade7f4a5e33cb35e23f502ce4e16`);
+            const meta = await tmdbRes.json();
+            const lang = meta.original_language || 'en';
+
+            // ترتيب السيرفرات حسب هوية المحتوى لتجنب التضارب وسد النقص:
+            if (lang === 'ja' || lang === 'ko' || lang === 'zh' || lang === 'tr') {
+                // إذا كان أنمي، كوري، أو تركي -> نبدأ بـ Videasy أولاً
+                activeChain = [providers.videasy, providers.autoembed, providers.embed2, providers.vidlink];
+            } else if (meta.release_date && parseInt(meta.release_date.substring(0,4)) < 2015) {
+                // إذا كان عملاً قديماً -> نبدأ بـ 2Embed المتخصص بالأرشيف
+                activeChain = [providers.embed2, providers.autoembed, providers.vidlink, providers.videasy];
+            } else {
+                // إذا كان عملاً عالمياً حديثاً -> نبدأ بـ VidLink
+                activeChain = [providers.vidlink, providers.autoembed, providers.videasy, providers.embed2];
+            }
+
+            currentChainIndex = 0;
+            displayCurrentSource(meta.title || meta.name || id);
+
+        } catch (e) {
+            // في حال تعذر جلب البيانات الوصفية، نعتمد الترتيب الافتراضي المتوازن
+            activeChain = [providers.videasy, providers.vidlink, providers.autoembed, providers.embed2];
+            currentChainIndex = 0;
+            displayCurrentSource(id);
+        }
     }
 
-    function loadNextAvailableSource() {
-        if (activePoolIndex >= integratedPool.length) {
-            document.getElementById('engineStatus').innerText = "❌ تعذر العثور على بث شغال من جميع المصادر المدمجة.";
-            return;
-        }
-
+    function displayCurrentSource(title) {
         const id = document.getElementById('mediaId').value.trim();
         const type = document.getElementById('mediaType').value;
         const s = document.getElementById('seasonNum').value;
         const e = document.getElementById('episodeNum').value;
         const player = document.getElementById('unifiedPlayer');
-        const status = document.getElementById('engineStatus');
+        const status = document.getElementById('routingInfo');
 
-        const currentEngine = integratedPool[activePoolIndex];
-        const streamTarget = currentEngine.buildUrl(type, id, s, e);
+        const currentProvider = activeChain[currentChainIndex];
+        player.src = currentProvider.build(type, id, s, e);
 
-        status.innerText = `جاري الاتصال والتشغيل تلقائياً عبر: ${currentEngine.name}...`;
-        player.src = streamTarget;
+        status.innerHTML = `العمل: <strong style="color:#fff;">${title}</strong> | المصدر الحالي: <strong style="color:#45f3ff;">${currentProvider.name}</strong> [${currentChainIndex + 1}/${activeChain.length}]`;
+    }
 
-        // إذا حدث خطأ في التحميل داخل الإطار ينتقل تلقائياً للمصدر الذي يليه
-        player.onerror = () => {
-            activePoolIndex++;
-            loadNextAvailableSource();
-        };
+    // الانتقال للسيرفر التالي في السلسلة التكاملية عند نقص العمل
+    function nextFallbackSource() {
+        if (activeChain.length === 0) return;
+        currentChainIndex = (currentChainIndex + 1) % activeChain.length;
+        displayCurrentSource(document.getElementById('mediaId').value.trim());
     }
 
     window.onload = () => {
         toggleInputs();
-        startUnifiedStream();
+        routeSmartPlayback();
     };
 </script>
 </body>
