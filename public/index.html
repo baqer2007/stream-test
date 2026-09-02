@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>منصة البث متعددة المصادر</title>
+    <title>مشغل البث المدمج</title>
     <style>
         * {
             box-sizing: border-box;
@@ -17,24 +17,16 @@
             display: flex;
             flex-direction: column;
             align-items: center;
+            justify-content: center;
             min-height: 100vh;
-            padding: 20px 10px;
+            padding: 15px;
         }
         .container {
             width: 100%;
-            max-width: 950px;
+            max-width: 900px;
             display: flex;
             flex-direction: column;
             gap: 15px;
-        }
-        .header {
-            text-align: center;
-            margin-bottom: 10px;
-        }
-        .header h1 {
-            font-size: 22px;
-            color: #45f3ff;
-            margin-bottom: 5px;
         }
         .search-box {
             display: flex;
@@ -54,7 +46,7 @@
             font-size: 14px;
             outline: none;
         }
-        input { flex: 2; min-width: 150px; }
+        input { flex: 2; min-width: 140px; }
         select { flex: 1; min-width: 120px; }
         button {
             background-color: #45f3ff;
@@ -65,33 +57,6 @@
             flex: 1;
             min-width: 100px;
         }
-        button:hover { background-color: #38b2ac; }
-        
-        /* شريط السيرفرات المتعددة */
-        .server-tabs {
-            display: flex;
-            gap: 8px;
-            overflow-x: auto;
-            padding-bottom: 5px;
-        }
-        .tab-btn {
-            background: #14161d;
-            border: 1px solid #2d3748;
-            color: #c5c6c7;
-            padding: 8px 14px;
-            border-radius: 6px;
-            cursor: pointer;
-            white-space: nowrap;
-            font-size: 13px;
-            transition: 0.2s;
-        }
-        .tab-btn.active {
-            background: #45f3ff;
-            color: #0b0c10;
-            font-weight: bold;
-            border-color: #45f3ff;
-        }
-
         .player-wrapper {
             position: relative;
             width: 100%;
@@ -99,154 +64,120 @@
             border-radius: 12px;
             overflow: hidden;
             background: #000;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.8);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.8);
         }
         iframe {
             width: 100%;
             height: 100%;
             border: none;
         }
-        .status-bar {
+        .status-badge {
             font-size: 13px;
-            color: #888;
+            color: #45f3ff;
             display: flex;
-            justify-content: space-between;
             align-items: center;
-            padding: 0 5px;
+            gap: 8px;
+        }
+        .status-badge span {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: #45f3ff;
         }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <div class="header">
-        <h1>نظام دمج السيرفرات الذكي (Multi-Source Hub)</h1>
-        <p style="font-size: 13px; color: #888;">تبديل فوري بين المصادر بدون تعطل العمل</p>
-    </div>
-
-    <!-- لوحة التحكم بالعمل -->
     <div class="search-box">
-        <input type="text" id="mediaId" placeholder="معرّف TMDB (مثال: 550 لفيلم، 94605 لمسلسل)" value="550">
-        <select id="mediaType" onchange="toggleEpControls()">
-            <option value="movie">فيلم (Movie)</option>
+        <input type="text" id="mediaId" placeholder="معرّف TMDB (مثال: 550 أو 94605)" value="94605">
+        <select id="mediaType" onchange="toggleInputs()">
             <option value="tv">مسلسل (TV Show)</option>
+            <option value="movie">فيلم (Movie)</option>
         </select>
-        <input type="number" id="seasonNum" placeholder="الموسم" value="1" style="display:none; max-width: 80px;">
-        <input type="number" id="episodeNum" placeholder="الحلقة" value="1" style="display:none; max-width: 80px;">
-        <button onclick="updateAllSources()">تحديث المصادر</button>
+        <input type="number" id="seasonNum" placeholder="الموسم" value="1" style="max-width: 80px;">
+        <input type="number" id="episodeNum" placeholder="الحلقة" value="1" style="max-width: 80px;">
+        <button onclick="startUnifiedStream()">تشغيل العمل</button>
     </div>
 
-    <!-- شريط توزيع السيرفرات مدموجة في مكان واحد -->
-    <div class="server-tabs" id="serverTabs">
-        <!-- تتولد الأزرار تلقائياً عبر الجافاسكريبت -->
-    </div>
-
-    <!-- حاوية المشغل -->
+    <!-- واجهة مشغل واحدة بدون أزرار سيرفرات مبعثرة -->
     <div class="player-wrapper">
-        <iframe id="mainPlayer" src="" allowfullscreen allow="autoplay; encrypted-media; fullscreen; picture-in-picture"></iframe>
+        <iframe id="unifiedPlayer" src="" allowfullscreen allow="autoplay; encrypted-media; fullscreen; picture-in-picture"></iframe>
     </div>
 
-    <div class="status-bar">
-        <span id="currentSourceLabel">المصدر الحالي: غير محدد</span>
-        <button onclick="reportBroken()" style="padding: 4px 8px; font-size: 11px; background: transparent; color: #ff5555; border: 1px solid #ff5555;">السيرفر لا يعمل؟ التبديل للتالي</button>
+    <div class="status-badge">
+        <span></span>
+        <div id="engineStatus">نظام الدمج الذكي: جاهز للاتصال</div>
     </div>
 </div>
 
 <script>
-    // 1. مصفوفة المصادر المدمجة (لكل مصدر تخصصه ونظامه)
-    const sourcesConfig = [
+    // قائمة السيرفرات المدمجة خلف الكواليس (تركي، آسيوي، وعالمي)
+    const integratedPool = [
         {
-            name: "سيرفر 1 (Super VIP)",
-            desc: "عالمي فائق السرعة",
-            getUrl: (type, id, s, e) => type === 'movie' 
+            name: "المصدر الرئيسي",
+            buildUrl: (t, id, s, e) => t === 'movie' 
                 ? `https://vidlink.pro/movie/${id}`
                 : `https://vidlink.pro/tv/${id}/${s}/${e}`
         },
         {
-            name: "سيرفر 2 (Videasy)",
-            desc: "تركي وآسيوي وعالمي",
-            getUrl: (type, id, s, e) => type === 'movie'
+            name: "مصدر المحتوى الآسيوي والتركي",
+            buildUrl: (t, id, s, e) => t === 'movie'
                 ? `https://player.videasy.net/movie/${id}`
                 : `https://player.videasy.net/tv/${id}/${s}/${e}`
         },
         {
-            name: "سيرفر 3 (AutoEmbed)",
-            desc: "احتياطي متعدد الجودات",
-            getUrl: (type, id, s, e) => type === 'movie'
+            name: "المصدر الاحتياطي السريع",
+            buildUrl: (t, id, s, e) => t === 'movie'
                 ? `https://player.autoembed.cc/embed/movie/${id}`
                 : `https://player.autoembed.cc/embed/tv/${id}/${s}/${e}`
-        },
-        {
-            name: "سيرفر 4 (EmbedSu)",
-            desc: "مستقر للأعمال المشهورة",
-            getUrl: (type, id, s, e) => type === 'movie'
-                ? `https://embed.su/embed/movie/${id}`
-                : `https://embed.su/embed/tv/${id}/${s}/${e}`
-        },
-        {
-            name: "سيرفر 5 (Smashy)",
-            desc: "متخصص في الأنمي والدراما الآسيوية",
-            getUrl: (type, id, s, e) => type === 'movie'
-                ? `https://player.smashystream.xyz/movie/${id}`
-                : `https://player.smashystream.xyz/tv/${id}?s=${s}&e=${e}`
         }
     ];
 
-    let currentSourceIndex = 0;
+    let activePoolIndex = 0;
 
-    function toggleEpControls() {
-        const type = document.getElementById('mediaType').value;
-        const isTv = type === 'tv';
+    function toggleInputs() {
+        const isTv = document.getElementById('mediaType').value === 'tv';
         document.getElementById('seasonNum').style.display = isTv ? 'block' : 'none';
         document.getElementById('episodeNum').style.display = isTv ? 'block' : 'none';
     }
 
-    // توليد أزرار السيرفرات في الواجهة
-    function renderServerTabs() {
-        const container = document.getElementById('serverTabs');
-        container.innerHTML = '';
-        
-        sourcesConfig.forEach((source, index) => {
-            const btn = document.createElement('button');
-            btn.className = `tab-btn ${index === currentSourceIndex ? 'active' : ''}`;
-            btn.innerText = `${source.name}`;
-            btn.onclick = () => switchServer(index);
-            container.appendChild(btn);
-        });
+    // منطق الدمج: اختيار وتشغيل المصدر تلقائياً دون إظهاره للمستخدم
+    function startUnifiedStream() {
+        activePoolIndex = 0;
+        loadNextAvailableSource();
     }
 
-    // تبديل السيرفر فورياً
-    function switchServer(index) {
-        currentSourceIndex = index;
-        renderServerTabs();
+    function loadNextAvailableSource() {
+        if (activePoolIndex >= integratedPool.length) {
+            document.getElementById('engineStatus').innerText = "❌ تعذر العثور على بث شغال من جميع المصادر المدمجة.";
+            return;
+        }
 
         const id = document.getElementById('mediaId').value.trim();
         const type = document.getElementById('mediaType').value;
         const s = document.getElementById('seasonNum').value;
         const e = document.getElementById('episodeNum').value;
-        const player = document.getElementById('mainPlayer');
-        const label = document.getElementById('currentSourceLabel');
+        const player = document.getElementById('unifiedPlayer');
+        const status = document.getElementById('engineStatus');
 
-        const activeSource = sourcesConfig[index];
-        const targetUrl = activeSource.getUrl(type, id, s, e);
+        const currentEngine = integratedPool[activePoolIndex];
+        const streamTarget = currentEngine.buildUrl(type, id, s, e);
 
-        player.src = targetUrl;
-        label.innerText = `المصدر الحالي: ${activeSource.name} (${activeSource.desc})`;
-    }
+        status.innerText = `جاري الاتصال والتشغيل تلقائياً عبر: ${currentEngine.name}...`;
+        player.src = streamTarget;
 
-    function updateAllSources() {
-        switchServer(currentSourceIndex);
-    }
-
-    // في حال تعطل أحد السيرفرات يتم الانتقال للسيرفر التالي تلقائياً
-    function reportBroken() {
-        currentSourceIndex = (currentSourceIndex + 1) % sourcesConfig.length;
-        switchServer(currentSourceIndex);
+        // إذا حدث خطأ في التحميل داخل الإطار ينتقل تلقائياً للمصدر الذي يليه
+        player.onerror = () => {
+            activePoolIndex++;
+            loadNextAvailableSource();
+        };
     }
 
     window.onload = () => {
-        renderServerTabs();
-        updateAllSources();
+        toggleInputs();
+        startUnifiedStream();
     };
 </script>
 </body>
